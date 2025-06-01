@@ -4,8 +4,6 @@ from collections import defaultdict
 from typing import Dict
 
 import structlog
-import httpx
-import asyncio
 
 from auth import authelia_login
 from config import get_async_logger

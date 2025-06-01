@@ -1,6 +1,6 @@
 import httpx
-from config import SONARR_URL, SONARR_API_KEY, logger
 
+from config import SONARR_API_KEY, SONARR_URL, logger
 
 # Add a global semaphore for concurrency limiting
 semaphore = None
