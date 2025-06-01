@@ -17,6 +17,7 @@ from sonarr import (
     get_episodes_for_series,
     get_history_for_episode,
     get_series,
+    set_concurrency_limit,
 )
 
 logger: structlog.stdlib.AsyncBoundLogger = get_async_logger()
@@ -31,15 +32,14 @@ async def process_series(client, series_id: int) -> Dict[str, int]:
     episodes = await get_episodes_for_series(client, series_id)
     indexer_counts: Dict[str, int] = defaultdict(lambda: 0)
 
-    for ep in episodes:
+    # Process episodes in parallel for this series
+    async def process_episode(ep):
+        nonlocal indexer_counts
         # Skip episodes without files
         if not ep.get("hasFile", False):
-            continue
-
+            return
         indexer = "unknown"
         episode_detail = f"{ellipsis(series['title'], 12)} S{ep['seasonNumber']:02}E{ep['episodeNumber']:02} - {ellipsis(ep.get('title', 'Unknown'), 18)}"
-
-        # Retrieves all history events for the episode
         try:
             history = await get_history_for_episode(client, ep["id"])
         except Exception as e:
@@ -52,7 +52,7 @@ async def process_series(client, series_id: int) -> Dict[str, int]:
                     episode_id=ep["id"],
                     episode=episode_detail,
                 )
-                continue
+                return
             else:
                 await logger.error(
                     "Error fetching history for episode",
@@ -60,9 +60,7 @@ async def process_series(client, series_id: int) -> Dict[str, int]:
                     episode=episode_detail,
                     error=str(e),
                 )
-                continue
-
-        # Get the episode's episodeFileId
+                return
         target_file_id = ep.get("episodeFileId")
         if not target_file_id:
             await logger.error(
@@ -70,7 +68,7 @@ async def process_series(client, series_id: int) -> Dict[str, int]:
                 episode_id=ep["id"],
                 episode=episode_detail,
             )
-            continue
+            return
 
         # Find the 'downloadFolderImported' event with the matching data.fileId
         def is_import_event(event: Dict, file_id: int) -> bool:
@@ -93,7 +91,7 @@ async def process_series(client, series_id: int) -> Dict[str, int]:
                 episode=episode_detail,
                 target_file_id=target_file_id,
             )
-            continue
+            return
 
         # Acquire the event's downloadId
         download_id = import_event.get("downloadId")
@@ -104,7 +102,7 @@ async def process_series(client, series_id: int) -> Dict[str, int]:
                 episode=episode_detail,
                 target_file_id=target_file_id,
             )
-            continue
+            return
 
         # Find the 'grabbed' event with the matching downloadId
         def is_grabbed_event(event: Dict, download_id: str) -> bool:
@@ -128,7 +126,7 @@ async def process_series(client, series_id: int) -> Dict[str, int]:
                 download_id=ellipsis(download_id, 20),
                 episode=episode_detail,
             )
-            continue
+            return
 
         # Extract the indexer from the 'grabbed' event
         indexer = grabbed_event.get("data", {}).get("indexer")
@@ -146,6 +144,10 @@ async def process_series(client, series_id: int) -> Dict[str, int]:
             indexer = indexer[:-11] if indexer.endswith("(Prowlarr)") else indexer
 
         indexer_counts[indexer] += 1
+
+    async with anyio.create_task_group() as tg:
+        for ep in episodes:
+            tg.start_soon(process_episode, ep)
 
     return indexer_counts
 
@@ -166,6 +168,8 @@ async def main():
         raise Exception(
             "AUTHELIA_USERNAME and AUTHELIA_PASSWORD must be set in the .env file."
         )
+
+    set_concurrency_limit(25)  # Set the max number of concurrent Sonarr API requests
 
     # Request counter setup
     request_counter = {"count": 0, "active": 0}
