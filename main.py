@@ -203,8 +203,10 @@ async def main():
             )
             total_indexer_counts.update(indexer_counts)
 
-    async def print_rps(interval=3):
+    async def print_rps(interval=3, stop_event=None):
         while True:
+            if stop_event and stop_event.is_set():
+                break
             await anyio.sleep(interval)
             async with counter_lock:
                 rps = request_counter["count"] / interval
@@ -212,15 +214,18 @@ async def main():
                 request_counter["count"] = 0
             await logger.info(
                 "Requests per second and active requests",
-                rps=rps,
+                rps=round(rps, 1),
                 active_requests=active,
-                interval=interval,
             )
 
+    stop_event = anyio.Event()
+
     async with anyio.create_task_group() as tg:
-        tg.start_soon(print_rps, 3)
-        for series in series_list:
-            tg.start_soon(process_and_log, series)
+        tg.start_soon(print_rps, 3, stop_event)
+        async with anyio.create_task_group() as series_tg:
+            for series in series_list:
+                series_tg.start_soon(process_and_log, series)
+        stop_event.set()
 
     await logger.info(
         "Total indexer counts across all series",
