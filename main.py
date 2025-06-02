@@ -138,9 +138,6 @@ async def process_series(client, series_id: int) -> Dict[str, int]:
 
             indexer = "unknown"
 
-            # Normalize indexer names by removing the "(Prowlarr)" suffix
-            indexer = indexer[:-11] if indexer.endswith("(Prowlarr)") else indexer
-
         indexer_counts[indexer] += 1
 
     async with anyio.create_task_group() as tg:
@@ -231,6 +228,21 @@ async def main():
         "Total indexer counts across all series",
         indexers=dict(total_indexer_counts),
     )
+
+    # Print a formatted table of indexer statistics
+    if total_indexer_counts:
+        # Find the max width for indexer names and counts
+        indexer_width = max(len(str(idx)) for idx in total_indexer_counts.keys())
+        count_width = max(len(str(cnt)) for cnt in total_indexer_counts.values())
+        header = f"{'Indexer':<{indexer_width}} | {'Count':>{count_width}}"
+        sep = f"{'-'*indexer_width}-+-{'-'*count_width}"
+        print("\nIndexer Statistics:")
+        print(header)
+        print(sep)
+        for idx, cnt in sorted(total_indexer_counts.items(), key=lambda x: (-x[1], x[0])):
+            print(f"{idx:<{indexer_width}} | {cnt:>{count_width}}")
+    else:
+        print("No indexer statistics to display.")
 
 
 if __name__ == "__main__":
