@@ -1,17 +1,19 @@
-[tool.poetry]
+[project]
 name = "indexer-analyze"
 version = "0.1.0"
-description = ""
-authors = ["Xevion <xevion@xevion.dev>"]
+description = "A tool to analyze Sonarr indexer data."
+authors = [{ name = "Xevion", email = "xevion@xevion.dev" }]
 readme = "README.md"
+requires-python = ">=3.10,<4.0"
+dependencies = [
+    "python-dotenv>=1.1.0,<2.0.0",
+    "structlog>=25.3.0,<26.0.0",
+    "httpx[http2]>=0.28.1,<0.29.0",
+    "anyio>=4.9.0,<5.0.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-python-dotenv = "^1.1.0"
-structlog = "^25.3.0"
-httpx = {extras = ["http2"], version = "^0.28.1"}
-anyio = "^4.9.0"
-
+[tool.poetry]
+package-mode = false
 
 [build-system]
 requires = ["poetry-core"]
